@@ -1,0 +1,4 @@
+collections:
+  - name: kubernetes.core
+  - name: kubevirt.core
+    version: ">=2.3.0"

@@ -1,0 +1,43 @@
+---
+- name: Power the demo vApp
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vapp_namespace: demo-vapp
+    vapp_name: demo-vapp
+    power_action: started
+  tasks:
+    - name: Find virtual machines in the vApp
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        namespace: "{{ vapp_namespace }}"
+        label_selectors:
+          - "app.kubernetes.io/part-of={{ vapp_name }}"
+      register: found
+
+    - name: Fail when the vApp has no virtual machines
+      ansible.builtin.fail:
+        msg: "No virtual machines found for {{ vapp_name }}"
+      when: found.resources | length == 0
+
+    - name: Index name and start order
+      ansible.builtin.set_fact:
+        vapp_index: "{{ vapp_index | default([]) + [{'name': item.metadata.name, 'order': item.metadata.labels['start-order']}] }}"
+      loop: "{{ found.resources }}"
+
+    - name: Order the groups
+      ansible.builtin.set_fact:
+        ordered_groups: >-
+          {{
+            (vapp_index | groupby('order') | sort(attribute='0') | reverse)
+            if power_action == 'stopped'
+            else (vapp_index | groupby('order') | sort(attribute='0'))
+          }}
+
+    - name: Power one start-order group at a time
+      ansible.builtin.include_tasks: power-group.yml
+      loop: "{{ ordered_groups }}"
+      loop_control:
+        loop_var: power_group

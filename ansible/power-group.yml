@@ -1,0 +1,23 @@
+---
+- name: "{{ power_action | capitalize }} start-order {{ power_group.0 }}"
+  kubevirt.core.kubevirt_vm:
+    name: "{{ item.name }}"
+    namespace: "{{ vapp_namespace }}"
+    state: "{{ power_action }}"
+    wait: false
+    grace_period_seconds: "{{ 60 if power_action == 'stopped' else omit }}"
+  loop: "{{ power_group.1 }}"
+
+- name: Wait until start-order {{ power_group.0 }} reports {{ desired_status }}
+  kubernetes.core.k8s_info:
+    api_version: kubevirt.io/v1
+    kind: VirtualMachine
+    name: "{{ item.name }}"
+    namespace: "{{ vapp_namespace }}"
+  register: vm_state
+  until: vm_state.resources[0].status.printableStatus == desired_status
+  retries: 40
+  delay: 5
+  loop: "{{ power_group.1 }}"
+  vars:
+    desired_status: "{{ 'Running' if power_action == 'started' else 'Stopped' }}"
